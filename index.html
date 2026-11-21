@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline Translator</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#f5f7fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Translator">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --ink: #1b2430;
+    --muted: #5d6b7c;
+    --line: #d5dce5;
+    --accent: #2b5fd9;
+    --accent-ink: #ffffff;
+    --radius: 10px;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c;
+      --surface: #1a2029;
+      --ink: #e8edf3;
+      --muted: #93a1b3;
+      --line: #2e3744;
+      --accent: #6f98ff;
+      --accent-ink: #0d1320;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    line-height: 1.5;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  main {
+    width: 100%;
+    max-width: 640px;
+  }
+
+  h1 {
+    margin: 0 0 20px;
+    font-size: 1.5rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+
+  /* Direction switch */
+  .switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .switch input { position: absolute; opacity: 0; pointer-events: none; }
+  .switch label {
+    padding: 9px 12px;
+    text-align: center;
+    font-size: 0.95rem;
+    color: var(--muted);
+    border-radius: 7px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .switch input:checked + label {
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  .switch input:focus-visible + label {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Text areas */
+  .field { margin-bottom: 14px; }
+  .field-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    min-height: 32px;
+  }
+  .field-head label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  textarea {
+    display: block;
+    width: 100%;
+    min-height: 140px;
+    padding: 12px 14px;
+    font: inherit;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    resize: vertical;
+  }
+  textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  textarea[readonly] { background: transparent; }
+
+  /* Buttons */
+  button {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 7px;
+  }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .primary {
+    width: 100%;
+    padding: 11px 16px;
+    margin-bottom: 18px;
+    font-weight: 600;
+    color: var(--accent-ink);
+    background: var(--accent);
+    border: 0;
+    border-radius: var(--radius);
+  }
+  .primary:hover { filter: brightness(1.08); }
+
+  .secondary {
+    padding: 5px 12px;
+    font-size: 0.85rem;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+  .secondary:hover { border-color: var(--accent); }
+
+  /* Language database editor */
+  @media (prefers-color-scheme: dark) { :root { --danger: #ff8a80; } }
+
+  .db {
+    margin-top: 32px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+  }
+  h2 { margin: 0 0 12px; font-size: 1.1rem; font-weight: 650; }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+  .tabs button {
+    padding: 6px 12px;
+    font-size: 0.88rem;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid transparent;
+  }
+  .tabs button[aria-selected="true"] {
+    color: var(--ink);
+    background: var(--surface);
+    border-color: var(--line);
+    font-weight: 600;
+  }
+
+  .hint { margin: 0 0 12px; font-size: 0.85rem; color: var(--muted); }
+  .error { min-height: 1.2em; margin: 0 0 8px; font-size: 0.85rem; color: var(--danger, #b3261e); }
+
+  .db-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .fld label { display: block; margin-bottom: 4px; font-size: 0.82rem; color: var(--muted); }
+  input[type="text"], input[type="search"], select {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    font: inherit;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+  }
+  input[type="text"]:focus-visible, input[type="search"]:focus-visible, select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .actions { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
+  .io { margin-top: 14px; flex-wrap: wrap; }
+  .primary.compact { width: auto; margin: 0; padding: 8px 16px; }
+
+  #db-filter { margin: 8px 0 10px; }
+
+  .items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .item:last-child { border-bottom: 0; }
+  .item.editing { box-shadow: inset 3px 0 0 var(--accent); }
+  .item-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .tag { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+  .empty { padding: 14px 12px; color: var(--muted); font-size: 0.9rem; }
+  .secondary.danger:hover { border-color: var(--danger, #b3261e); color: var(--danger, #b3261e); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Offline translator</h1>
+
+  <!-- Direction switch (labels are filled in from CONFIG) -->
+  <div class="switch" role="radiogroup" aria-label="Translation direction">
+    <input type="radio" name="direction" id="dir-to-en" value="toEnglish" checked>
+    <label for="dir-to-en" id="label-to-en"></label>
+    <input type="radio" name="direction" id="dir-from-en" value="fromEnglish">
+    <label for="dir-from-en" id="label-from-en"></label>
+  </div>
+
+  <div class="field">
+    <div class="field-head"><label for="input" id="input-label">Text</label></div>
+    <textarea id="input" placeholder="Type or paste text here" spellcheck="false"></textarea>
+  </div>
+
+  <button class="primary" id="translate-btn" type="button">Translate</button>
+
+  <div class="field">
+    <div class="field-head">
+      <label for="output" id="output-label">Translation</label>
+      <button class="secondary" id="copy-btn" type="button">Copy</button>
+    </div>
+    <textarea id="output" readonly placeholder="Translation appears here"></textarea>
+    <p class="hint" id="translate-status" aria-live="polite"></p>
+  </div>
+
+  <!-- Language database editor (built by initEditor in the script) -->
+  <section class="db" aria-labelledby="db-title">
+    <h2 id="db-title">Language database</h2>
+    <div class="tabs" id="db-tabs" role="tablist" aria-label="Database sections"></div>
+    <p class="hint" id="db-hint"></p>
+    <form id="db-form" class="db-form" autocomplete="off"></form>
+    <p class="error" id="db-error" role="alert"></p>
+    <input type="search" id="db-filter" placeholder="Filter entries" aria-label="Filter entries">
+    <ul class="items" id="db-list"></ul>
+    <p class="hint" id="db-status"></p>
+
+    <div class="actions io" role="group" aria-label="Backup and restore">
+      <button type="button" class="secondary" id="export-btn">Export JSON</button>
+      <button type="button" class="secondary" id="import-replace-btn">Import (replace)</button>
+      <button type="button" class="secondary" id="import-merge-btn">Import (merge)</button>
+      <input type="file" id="import-file" accept="application/json,.json" hidden>
+    </div>
+    <p class="hint" id="io-status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script type="module">
+import { createTranslator } from "./js/translator.js";
+
+{
+
+  /* ---------------------------------------------------------------
+   * 1. CONFIG – change the language name here.
+   * ------------------------------------------------------------- */
+  const CONFIG = {
+    languageName: "My Language",   // e.g. "Spanish"
+    englishName: "English"
+  };
+
+  /* ---------------------------------------------------------------
+   * 2. ENGINE – lives in js/ (tokenizer.js, translator.js, grammar-engine.js).
+   *    It is fed only from the Language database below; nothing is built in.
+   * ------------------------------------------------------------- */
+  function engineData() {
+    return {
+      words: db.words,
+      phrases: db.phrases,
+      exceptions: db.exceptions,
+      affixes: db.affixes,
+      rules: db.rules,
+      wordOrder: db.wordOrder.map(function (r) {
+        return { direction: r.direction, pattern: r.pattern, order: r.order.map(Number) };
+      })
+    };
+  }
+
+  function runEngine(text, dir) {
+    return createTranslator(engineData()).translate(text, dir);
+  }
+
+  /* ---------------------------------------------------------------
+   * 3b. DATABASE – schema and LocalStorage persistence.
+   *     To add a new kind of entry, add a section here and use it
+   *     in engineData(); the editor picks it up automatically.
+   * ------------------------------------------------------------- */
+  const STORAGE_KEY = "offlineTranslator.db.v1";
+
+  function L(s) { return s.replace(/\{lang\}/g, CONFIG.languageName); }
+
+  const DIRECTION_OPTIONS = [
+    ["both", "Both directions"],
+    ["toEnglish", "{lang} \u2192 English"],
+    ["fromEnglish", "English \u2192 {lang}"]
+  ];
+
+  function affixText(kind, s) { return s ? (kind === "prefix" ? s + "-" : "-" + s) : "(none)"; }
+
+  const SECTIONS = {
+    words: {
+      label: "Words",
+      hint: "List every English meaning, separated by commas. The first one is used when translating to English.",
+      fields: [
+        { key: "source", label: "{lang} word", ph: "word", required: true },
+        { key: "meanings", label: "English meanings", ph: "house, home", type: "list", required: true },
+        { key: "pos", label: "Part of speech (optional)", ph: "noun" }
+      ],
+      show: function (i) { return i.source + " \u2192 " + i.meanings.join(", "); },
+      tag: function (i) { return i.pos; }
+    },
+    phrases: {
+      label: "Phrases",
+      hint: "Matched as a whole, before single words, in both directions.",
+      fields: [
+        { key: "source", label: "{lang} phrase", ph: "phrase", required: true },
+        { key: "english", label: "English phrase", ph: "phrase", required: true }
+      ],
+      show: function (i) { return i.source + " \u2194 " + i.english; }
+    },
+    rules: {
+      label: "Grammar rules",
+      hint: "Run in order after words and affixes. Match a word or word sequence, or write /regex/ (applied to each word, $1 for groups). Exact phrases, exceptions and unknown words are never changed.",
+      fields: [
+        { key: "direction", label: "Applies to", type: "select", options: DIRECTION_OPTIONS },
+        { key: "find", label: "Find", ph: "word or /regex/", required: true },
+        { key: "replace", label: "Replace with", ph: "text (can be empty)" }
+      ],
+      show: function (i) { return i.find + " \u2192 " + (i.replace || "(nothing)"); },
+      tag: function (i) {
+        return L(DIRECTION_OPTIONS.filter(function (o) { return o[0] === i.direction; })[0][1]);
+      }
+    },
+    affixes: {
+      label: "Prefixes and suffixes",
+      hint: "Used when a word isn\u2019t found: the affix is removed, the stem is translated, and the affix is swapped. Hyphens are optional.",
+      fields: [
+        { key: "kind", label: "Type", type: "select", options: [["suffix", "Suffix"], ["prefix", "Prefix"]] },
+        { key: "affix", label: "{lang} affix", ph: "e.g. lar", required: true, affix: true },
+        { key: "english", label: "English equivalent", ph: "e.g. s (optional)", affix: true },
+        { key: "pos", label: "Resulting part of speech (optional)", ph: "noun" }
+      ],
+      show: function (i) { return affixText(i.kind, i.affix) + " \u2192 " + affixText(i.kind, i.english); }
+    },
+    wordOrder: {
+      label: "Word order",
+      hint: "Runs last. Pattern = parts of speech to find, in order (use * for any word). New order = positions 0, 1, 2\u2026 in the new arrangement, e.g. \u201c1, 0\u201d swaps two words.",
+      fields: [
+        { key: "direction", label: "Applies to", type: "select", options: DIRECTION_OPTIONS },
+        { key: "pattern", label: "Pattern", ph: "adj, noun", type: "list", required: true },
+        { key: "order", label: "New order", ph: "1, 0", type: "list", required: true }
+      ],
+      show: function (i) { return i.pattern.join(" ") + " \u2192 " + i.order.join(" "); },
+      tag: function (i) {
+        return L(DIRECTION_OPTIONS.filter(function (o) { return o[0] === i.direction; })[0][1]);
+      }
+    },
+    exceptions: {
+      label: "Exceptions",
+      hint: "Irregular forms. Used before words and affixes, and win over a phrase with the same text.",
+      fields: [
+        { key: "source", label: "{lang} text", ph: "irregular form", required: true },
+        { key: "english", label: "English text", ph: "translation", required: true }
+      ],
+      show: function (i) { return i.source + " \u2194 " + i.english; }
+    }
+  };
+
+  function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  // Validates and normalises one entry. Returns null if a required field is empty.
+  function cleanItem(sectionKey, raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const item = { id: typeof raw.id === "string" && raw.id ? raw.id : newId() };
+    const fields = SECTIONS[sectionKey].fields;
+    for (let n = 0; n < fields.length; n++) {
+      const f = fields[n];
+      let v = raw[f.key];
+      if (f.type === "list") {
+        v = (Array.isArray(v) ? v : String(v == null ? "" : v).split(","))
+          .map(function (s) { return String(s).trim(); })
+          .filter(Boolean);
+        if (f.required && !v.length) return null;
+      } else {
+        v = String(v == null ? "" : v).trim();
+        if (f.type === "select" && !f.options.some(function (o) { return o[0] === v; })) v = f.options[0][0];
+        if (f.affix) v = v.replace(/^-+|-+$/g, "");
+        if (f.required && !v) return null;
+      }
+      item[f.key] = v;
+    }
+    return item;
+  }
+
+  function loadDB() {
+    let raw = {};
+    try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e) { raw = {}; }
+    const data = {};
+    Object.keys(SECTIONS).forEach(function (key) {
+      data[key] = (Array.isArray(raw[key]) ? raw[key] : [])
+        .map(function (item) { return cleanItem(key, item); })
+        .filter(Boolean);
+    });
+    return data;
+  }
+
+  function saveDB() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); return true; } catch (e) { return false; }
+  }
+
+  const db = loadDB();
+
+  /* ---------------------------------------------------------------
+   * 4. UI WIRING
+   * ------------------------------------------------------------- */
+  const $ = function (id) { return document.getElementById(id); };
+  const input = $("input");
+  const output = $("output");
+  const copyBtn = $("copy-btn");
+
+  function currentDirection() {
+    return document.querySelector('input[name="direction"]:checked').value;
+  }
+
+  function updateLabels() {
+    const lang = CONFIG.languageName, en = CONFIG.englishName;
+    $("label-to-en").textContent = lang + " \u2192 " + en;
+    $("label-from-en").textContent = en + " \u2192 " + lang;
+
+    const toEn = currentDirection() === "toEnglish";
+    $("input-label").textContent = (toEn ? lang : en) + " text";
+    $("output-label").textContent = (toEn ? en : lang) + " translation";
+  }
+
+  function translate() {
+    const text = input.value.trim();
+    const notes = [];
+    if (!text) {
+      output.value = "";
+    } else {
+      const r = runEngine(text, currentDirection());
+      output.value = r.text;
+      const unknown = r.unknown.filter(function (w, i, a) { return a.indexOf(w) === i; });
+      if (unknown.length) notes.push("Not in the database: " + unknown.join(", "));
+      r.warnings.forEach(function (w) { notes.push(w); });
+    }
+    $("translate-status").textContent = notes.join(" \u00b7 ");
+  }
+
+  function copyOutput() {
+    if (!output.value) return;
+    function done() {
+      copyBtn.textContent = "Copied";
+      setTimeout(function () { copyBtn.textContent = "Copy"; }, 1500);
+    }
+    function fallback() {
+      output.select();
+      try { document.execCommand("copy"); done(); } catch (e) {}
+      output.setSelectionRange(0, 0);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(output.value).then(done, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  document.querySelectorAll('input[name="direction"]').forEach(function (radio) {
+    radio.addEventListener("change", function () {
+      updateLabels();
+      output.value = "";
+      $("translate-status").textContent = "";
+    });
+  });
+  $("translate-btn").addEventListener("click", translate);
+  input.addEventListener("keydown", function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") translate();
+  });
+  copyBtn.addEventListener("click", copyOutput);
+
+  /* ---------------------------------------------------------------
+   * 5. DATABASE EDITOR – add, edit and delete entries
+   * ------------------------------------------------------------- */
+  function initEditor() {
+    const tabsEl = $("db-tabs"), hintEl = $("db-hint"), formEl = $("db-form"),
+          errorEl = $("db-error"), filterEl = $("db-filter"), listEl = $("db-list"),
+          statusEl = $("db-status");
+    let activeTab = "words";
+    let editingId = null;
+
+    function h(tag, attrs, text) {
+      const n = document.createElement(tag);
+      Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+      if (text !== undefined) n.textContent = text;
+      return n;
+    }
+
+    function save() {
+      statusEl.textContent = saveDB()
+        ? ""
+        : "Couldn\u2019t save to LocalStorage. Changes will be lost when you close this page.";
+    }
+
+    function updateTabs() {
+      Array.prototype.forEach.call(tabsEl.children, function (b) {
+        const key = b.getAttribute("data-key");
+        b.setAttribute("aria-selected", key === activeTab ? "true" : "false");
+        b.textContent = SECTIONS[key].label + " (" + db[key].length + ")";
+      });
+    }
+
+    function renderForm() {
+      const sec = SECTIONS[activeTab];
+      const item = editingId
+        ? db[activeTab].filter(function (i) { return i.id === editingId; })[0]
+        : null;
+      formEl.textContent = "";
+
+      sec.fields.forEach(function (f) {
+        const id = "f-" + f.key;
+        const wrap = h("div", { "class": "fld" });
+        wrap.appendChild(h("label", { "for": id }, L(f.label)));
+        let input;
+        if (f.type === "select") {
+          input = h("select", { id: id, name: f.key });
+          f.options.forEach(function (o) { input.appendChild(h("option", { value: o[0] }, L(o[1]))); });
+        } else {
+          input = h("input", { id: id, name: f.key, type: "text", placeholder: f.ph || "" });
+        }
+        if (item) input.value = f.type === "list" ? item[f.key].join(", ") : item[f.key];
+        wrap.appendChild(input);
+        formEl.appendChild(wrap);
+      });
+
+      const actions = h("div", { "class": "actions" });
+      actions.appendChild(h("button", { type: "submit", "class": "primary compact" }, item ? "Save changes" : "Add"));
+      if (item) {
+        const cancel = h("button", { type: "button", "class": "secondary" }, "Cancel");
+        cancel.addEventListener("click", function () { editingId = null; renderAll(); });
+        actions.appendChild(cancel);
+      }
+      formEl.appendChild(actions);
+    }
+
+    function renderList() {
+      const sec = SECTIONS[activeTab];
+      const q = filterEl.value.trim().toLowerCase();
+      const items = db[activeTab].filter(function (i) {
+        return !q || sec.show(i).toLowerCase().indexOf(q) >= 0;
+      });
+      listEl.textContent = "";
+
+      if (!items.length) {
+        listEl.appendChild(h("li", { "class": "empty" },
+          db[activeTab].length ? "No matches." : "Nothing here yet. Add the first entry above."));
+        return;
+      }
+
+      items.forEach(function (i) {
+        const li = h("li", { "class": "item" + (i.id === editingId ? " editing" : "") });
+        li.appendChild(h("span", { "class": "item-text" }, sec.show(i)));
+        if (sec.tag) li.appendChild(h("span", { "class": "tag" }, sec.tag(i)));
+
+        const edit = h("button", { type: "button", "class": "secondary" }, "Edit");
+        edit.addEventListener("click", function () {
+          editingId = i.id;
+          errorEl.textContent = "";
+          renderForm();
+          renderList();
+          const first = formEl.elements[sec.fields[0].key];
+          first.focus();
+          first.select();
+        });
+
+        const del = h("button", { type: "button", "class": "secondary danger" }, "Delete");
+        del.addEventListener("click", function () {
+          if (!window.confirm("Delete this entry?")) return;
+          db[activeTab] = db[activeTab].filter(function (x) { return x.id !== i.id; });
+          if (editingId === i.id) editingId = null;
+          save();
+          renderAll();
+        });
+
+        li.appendChild(edit);
+        li.appendChild(del);
+        listEl.appendChild(li);
+      });
+    }
+
+    function renderAll() {
+      hintEl.textContent = SECTIONS[activeTab].hint;
+      errorEl.textContent = "";
+      updateTabs();
+      renderForm();
+      renderList();
+    }
+
+    Object.keys(SECTIONS).forEach(function (key) {
+      const b = h("button", { type: "button", role: "tab", "data-key": key });
+      b.addEventListener("click", function () {
+        activeTab = key;
+        editingId = null;
+        filterEl.value = "";
+        renderAll();
+      });
+      tabsEl.appendChild(b);
+    });
+
+    formEl.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const sec = SECTIONS[activeTab];
+      const raw = { id: editingId };
+      sec.fields.forEach(function (f) { raw[f.key] = formEl.elements[f.key].value; });
+
+      const entry = cleanItem(activeTab, raw);
+      if (!entry) {
+        errorEl.textContent = "Fill in: " + sec.fields
+          .filter(function (f) { return f.required; })
+          .map(function (f) { return L(f.label); })
+          .join(", ") + ".";
+        return;
+      }
+
+      const list = db[activeTab];
+      const idx = list.findIndex(function (x) { return x.id === editingId; });
+      if (idx >= 0) list[idx] = entry; else list.push(entry);
+
+      editingId = null;
+      filterEl.value = "";
+      save();
+      renderAll();
+      formEl.elements[sec.fields[0].key].focus();
+    });
+
+    filterEl.addEventListener("input", renderList);
+
+    /* --- JSON import / export ---
+     * File shape: { format, version, words, phrases, exceptions, affixes, rules, wordOrder }.
+     * Import accepts any file with some of those sections, so the split files
+     * data/dictionary.json and data/grammar.json work too. Replace mode only
+     * replaces the sections that are present in the file. */
+    const ioStatus = $("io-status"), fileEl = $("import-file");
+    let importMode = "replace";
+
+    function signature(key, item) {
+      return JSON.stringify(SECTIONS[key].fields.map(function (f) { return item[f.key]; }));
+    }
+
+    function load(raw, mode) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("This isn\u2019t a language database file.");
+      const keys = Object.keys(SECTIONS).filter(function (k) { return Array.isArray(raw[k]); });
+      if (!keys.length) throw new Error("No database sections (words, phrases, rules\u2026) found in this file.");
+      const result = { added: 0, duplicates: 0, skipped: 0 };
+      keys.forEach(function (k) {
+        const seen = {};
+        if (mode === "merge") db[k].forEach(function (i) { seen[signature(k, i)] = true; });
+        else db[k].length = 0;
+        raw[k].forEach(function (r) {
+          const item = cleanItem(k, Object.assign({}, r, { id: "" }));
+          if (!item) { result.skipped++; return; }
+          const sig = signature(k, item);
+          if (seen[sig]) { result.duplicates++; return; }
+          seen[sig] = true;
+          db[k].push(item);
+          result.added++;
+        });
+      });
+      editingId = null;
+      filterEl.value = "";
+      save();
+      renderAll();
+      return result;
+    }
+
+    function describe(r) {
+      const parts = [r.added + (r.added === 1 ? " entry" : " entries") + " imported"];
+      if (r.duplicates) parts.push(r.duplicates + " duplicate" + (r.duplicates === 1 ? "" : "s") + " skipped");
+      if (r.skipped) parts.push(r.skipped + " invalid skipped");
+      return parts.join(", ") + ".";
+    }
+
+    $("export-btn").addEventListener("click", function () {
+      const payload = { format: "offline-translator-db", version: 1 };
+      let total = 0;
+      Object.keys(SECTIONS).forEach(function (k) {
+        total += db[k].length;
+        payload[k] = db[k].map(function (i) {
+          const c = Object.assign({}, i);
+          delete c.id;
+          if (k === "wordOrder") {   // positions are numbers in the file, as the engine expects
+            const nums = c.order.map(Number);
+            if (nums.every(Number.isInteger)) c.order = nums;
+          }
+          return c;
+        });
+      });
+      const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+      const a = h("a", { href: url, download: "language-database-" + new Date().toISOString().slice(0, 10) + ".json" });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      ioStatus.textContent = "Exported " + total + (total === 1 ? " entry." : " entries.");
+    });
+
+    ["replace", "merge"].forEach(function (mode) {
+      $("import-" + mode + "-btn").addEventListener("click", function () {
+        if (mode === "replace" && !window.confirm("Importing replaces every section found in the file. Export first if you want a backup. Continue?")) return;
+        importMode = mode;
+        fileEl.click();
+      });
+    });
+
+    fileEl.addEventListener("change", function () {
+      const file = fileEl.files && fileEl.files[0];
+      fileEl.value = "";
+      if (!file) return;
+      file.text().then(function (text) {
+        ioStatus.textContent = describe(load(JSON.parse(text), importMode));
+      }).catch(function (e) {
+        ioStatus.textContent = "Import failed: " + (e instanceof SyntaxError ? "that file isn\u2019t valid JSON." : e.message);
+      });
+    });
+
+    renderAll();
+    return { load: load };
+  }
+
+  const editor = initEditor();
+  updateLabels();
+
+  /* First run only (nothing saved yet): start from data/dictionary.json and
+   * data/grammar.json if they contain entries. */
+  function seedFromDataFiles() {
+    try { if (localStorage.getItem(STORAGE_KEY) !== null) return; } catch (e) { return; }
+    Promise.all(["data/dictionary.json", "data/grammar.json"].map(function (u) {
+      return fetch(u).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
+    })).then(function (parts) {
+      const merged = Object.assign({}, parts[0], parts[1]);
+      const total = Object.keys(SECTIONS).reduce(function (n, k) { return n + (Array.isArray(merged[k]) ? merged[k].length : 0); }, 0);
+      if (!total) return;
+      const r = editor.load(merged, "replace");
+      $("io-status").textContent = "Loaded " + r.added + " entries from the data/ files.";
+    }).catch(function () {});
+  }
+  seedFromDataFiles();
+
+  /* Offline support (needs http/https, e.g. GitHub Pages). */
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  }
+}
+</script>
+</body>
+</html>
